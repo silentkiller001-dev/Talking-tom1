@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talking Kitten Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body { margin: 0; background: #e3f2fd; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        #kitten { font-size: 150px; transition: 0.2s; }
+        .listening { filter: drop-shadow(0 0 20px #42a5f5); transform: scale(1.05); }
+        .talking { animation: bounce 0.3s infinite; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+        #status { margin-top: 20px; font-weight: bold; color: #1565c0; text-align: center; }
+        .btn { padding: 15px 40px; font-size: 20px; border-radius: 50px; border: none; background: #1e88e5; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="kitten">🐱</div>
+    <p id="status">Tap to Wake Up the Kitten</p>
+    <button id="startBtn" class="btn">START</button>
+
+    <script>
+        const btn = document.getElementById('startBtn');
+        const kitten = document.getElementById('kitten');
+        const status = document.getElementById('status');
+
+        let recorder, chunks = [], audioCtx, mic, meter;
+        let isRecording = false;
+        let silenceTimer;
+
+        btn.onclick = async () => {
+            await Tone.start();
+            btn.style.display = "none";
+            setupAudio();
+        };
+
+        async function setupAudio() {
+            mic = new Tone.UserMedia();
+            meter = new Tone.Meter();
+            mic.connect(meter);
+
+            await mic.open();
+            status.innerText = "Kitten is listening... Speak now!";
+            startListeningLoop();
+        }
+
+        function startListeningLoop() {
+            const stream = mic.stream;
+            recorder = new MediaRecorder(stream);
+            
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = playBack;
+
+            // Loop to check for voice activity
+            setInterval(() => {
+                const vol = meter.getValue(); // Returns dB (-100 to 0)
+                
+                if (vol > -45) { // User is speaking
+                    if (!isRecording) {
+                        isRecording = true;
+                        chunks = [];
+                        recorder.start();
+                        status.innerText = "Kitten is listening...";
+                        kitten.classList.add('listening');
+                    }
+                    clearTimeout(silenceTimer);
+                } else { // Silence
+                    if (isRecording && !silenceTimer) {
+                        silenceTimer = setTimeout(() => {
+                            recorder.stop();
+                            isRecording = false;
+                            silenceTimer = null;
+                        }, 1000); // Wait for 1 second of silence
+                    }
+                }
+            }, 100);
+        }
+
+        function playBack() {
+            status.innerText = "Kitten is repeating!";
+            kitten.classList.remove('listening');
+            kitten.classList.add('talking');
+            kitten.innerText = "😺";
+
+            const blob = new Blob(chunks, { type: 'audio/ogg; codecs=opus' });
+            const url = URL.createObjectURL(blob);
+            
+            // Apply Kitten Pitch
+            const player = new Tone.Player(url).toDestination();
+            const pitchShift = new Tone.PitchShift(7).toDestination();
+            player.connect(pitchShift);
+            
+            player.start();
+            player.onstop = () => {
+                kitten.classList.remove('talking');
+                kitten.innerText = "🐱";
+                status.innerText = "Kitten is listening again...";
+            };
+        }
+    </script>
+</body>
+</html>
